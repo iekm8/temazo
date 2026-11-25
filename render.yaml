@@ -1,0 +1,9 @@
+# Render Blueprint: one web service that serves the site and the game (WebSockets).
+services:
+  - type: web
+    name: temazo
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
