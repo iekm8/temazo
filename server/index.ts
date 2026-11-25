@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import express from "express";
 import { Server } from "socket.io";
 import type { ClientToServer, ServerToClient } from "../shared/protocol.ts";
-import { SONGS, getPreview } from "./catalog.ts";
+import { SONGS, deezerPreview, getPreview, itunesPreview } from "./catalog.ts";
 import { Room } from "./room.ts";
 
 // In dev Vite owns PORT (5173) and proxies /socket.io to 3001.
@@ -17,6 +17,19 @@ const io = new Server<ClientToServer, ServerToClient, {}, { code?: string; playe
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true, rooms: rooms.size });
+});
+
+// Diagnostics: can this server reach the audio previews?
+app.get("/health/preview", async (_req, res) => {
+  const song = SONGS[Math.floor(Math.random() * SONGS.length)];
+  const check = async (fn: (s: typeof song) => Promise<string>) => {
+    try {
+      return { ok: true, url: (await fn(song)).slice(0, 60) };
+    } catch (e) {
+      return { ok: false, error: (e as Error).message };
+    }
+  };
+  res.json({ song: `${song.artists[0]} - ${song.title}`, deezer: await check(deezerPreview), itunes: await check(itunesPreview) });
 });
 
 // In production the built web app is served from here too.

@@ -96,7 +96,7 @@ export function Lobby({ state, me, onLeave }: { state: RoomState; me: string; on
         ) : (
           <p className="muted center">Esperando a que {host?.name ?? "el anfitrión"} empiece la partida…</p>
         )}
-        {error && <p className="error">{error}</p>}
+        {(error || state.notice) && <p className="error">{error || state.notice}</p>}
       </div>
     </main>
   );

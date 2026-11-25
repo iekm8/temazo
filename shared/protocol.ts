@@ -82,6 +82,7 @@ export interface RoomState {
   hostId: string;
   phase: Phase;
   settings: Settings;
+  notice?: string;
   players: PublicPlayer[];
   round?: RoundView;
   feed: FeedItem[];

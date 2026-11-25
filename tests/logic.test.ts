@@ -52,7 +52,7 @@ describe("Room", () => {
   const setup = async (modes: ("title" | "feat" | "year")[], rounds = 3) => {
     const room = new Room("ABCD", {
       songs,
-      getPreview: async (id) => `https://x/${id}.mp3`,
+      getPreview: async (s) => `https://x/${s.deezerId}.mp3`,
       onChange: () => {},
       allowedModes: ["title", "feat", "year"],
     });

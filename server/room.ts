@@ -50,7 +50,7 @@ interface Round {
 
 export interface RoomDeps {
   songs: Song[];
-  getPreview: (deezerId: number) => Promise<string | null>;
+  getPreview: (song: Song) => Promise<string | null>;
   onChange: (room: Room) => void;
   rand?: () => number;
   /** Which minigames this room may play (defaults to ENABLED_MODES). */
@@ -62,6 +62,8 @@ export class Room {
   phase: Phase = "lobby";
   settings: Settings;
   players = new Map<string, Player>();
+  /** Message for everyone in the lobby, e.g. why the game couldn't start. */
+  notice?: string;
   private rounds: Round[] = [];
   private index = -1;
   private feed: FeedItem[] = [];
@@ -162,14 +164,17 @@ export class Room {
     this.changed();
 
     const planned = this.planRounds();
-    const previews = await Promise.all(planned.map((r) => this.deps.getPreview(r.song.deezerId)));
+    this.notice = undefined;
+    const previews = await Promise.all(planned.map((r) => this.deps.getPreview(r.song)));
     this.rounds = planned
       .map((r, i) => ({ ...r, previewUrl: previews[i] ?? "" }))
       .filter((r) => r.previewUrl);
     if (!this.rounds.length) {
+      const error = "No se pudieron cargar las canciones. Inténtalo otra vez en un momento.";
       this.phase = "lobby";
+      this.notice = error; // shown in the lobby (the start button's screen was unmounted meanwhile)
       this.changed();
-      return { ok: false, error: "No se pudieron cargar las canciones. Inténtalo otra vez." };
+      return { ok: false, error };
     }
     for (const p of this.players.values()) p.score = 0;
     this.index = -1;
@@ -348,6 +353,7 @@ export class Room {
       hostId: this.hostId,
       phase: this.phase,
       settings: this.settings,
+      notice: this.notice,
       players: [...this.players.values()].map(({ id, name, score, connected, color }) => ({
         id,
         name,
