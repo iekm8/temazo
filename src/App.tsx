@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { RoomState } from "../shared/protocol.ts";
-import { onAudioBlocked, playPreview, retryPlay, stopAudio } from "./audio.ts";
+import { onAudioBlocked, playPreview, prepareAudio, retryPlay, stopAudio, warmAudio } from "./audio.ts";
 import { loadName, loadSeat, saveSeat, serverTime, socket, syncClock } from "./net.ts";
 import { Home } from "./screens/Home.tsx";
 import { Lobby } from "./screens/Lobby.tsx";
@@ -48,18 +48,25 @@ export function App() {
     };
   }, []);
 
-  // Music: plays from the moment the question appears until the next countdown.
+  // Music: loads (muted) during the countdown, plays from the moment the
+  // question appears until the next countdown. The next song is fetched early.
   const round = state?.round;
   const previewUrl = round?.question?.previewUrl;
+  const preload = round?.preload;
   const phase = state?.phase;
   useEffect(() => {
     if ((phase === "question" || phase === "reveal") && previewUrl && round) {
       playPreview(previewUrl, Math.max(0, (serverTime() - round.startsAt) / 1000));
+    } else if (phase === "countdown" && preload) {
+      prepareAudio(preload);
     } else {
       stopAudio();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, previewUrl]);
+  }, [phase, previewUrl, preload]);
+  useEffect(() => {
+    if ((phase === "question" || phase === "reveal") && preload) warmAudio(preload);
+  }, [phase, preload]);
 
   const entered = (code: string, playerId: string) => {
     saveSeat({ code, playerId });

@@ -21,20 +21,52 @@ export function onAudioBlocked(fn: (blocked: boolean) => void) {
 }
 
 let currentUrl = "";
+
+function setSource(url: string) {
+  if (currentUrl === url) return false;
+  currentUrl = url;
+  el.src = url;
+  return true;
+}
+
+/**
+ * During the countdown: start loading the song by playing it muted, so it is
+ * buffered when the question appears (mobile browsers ignore preload="auto").
+ */
+export function prepareAudio(url: string) {
+  setSource(url);
+  el.muted = true;
+  el.play().catch(() => {});
+}
+
 export function playPreview(url: string, offsetSec = 0) {
-  if (currentUrl !== url) {
-    currentUrl = url;
-    el.src = url;
-  }
-  const start = () => {
-    if (offsetSec > 0 && offsetSec < 29) el.currentTime = offsetSec;
+  const fresh = setSource(url);
+  // Already playing this song out loud (e.g. question -> reveal): leave it alone.
+  if (!fresh && !el.paused && !el.muted) return;
+  const seek = () => {
+    // Late joiners / reconnects jump to where everyone else is; others start at 0.
+    const target = offsetSec > 1 && offsetSec < 29 ? offsetSec : 0;
+    if (Math.abs(el.currentTime - target) > 0.25) {
+      try {
+        el.currentTime = target;
+      } catch {}
+    }
   };
-  if (el.readyState >= 1) start();
-  else el.addEventListener("loadedmetadata", start, { once: true });
+  if (el.readyState >= 1) seek();
+  else el.addEventListener("loadedmetadata", seek, { once: true });
+  el.muted = false;
   el.volume = 1;
   el.play()
     .then(() => blockedListener?.(false))
     .catch(() => blockedListener?.(true));
+}
+
+/** Warm the browser cache with the next round's song while this one plays. */
+const warmed = new Set<string>();
+export function warmAudio(url: string) {
+  if (!url || warmed.has(url)) return;
+  warmed.add(url);
+  fetch(url, { mode: "no-cors" }).catch(() => {});
 }
 
 export function retryPlay() {
@@ -46,5 +78,5 @@ export function retryPlay() {
 
 export function stopAudio() {
   el.pause();
-  currentUrl = "";
+  el.muted = false;
 }

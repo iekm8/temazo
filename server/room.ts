@@ -388,6 +388,8 @@ export class Room {
             mode: round.mode,
             startsAt: round.startsAt,
             endsAt: round.endsAt,
+            // Preview URLs are opaque CDN links, so sending them early doesn't leak the title.
+            preload: this.phase === "countdown" ? round.previewUrl : this.rounds[this.index + 1]?.previewUrl,
             answered: [...round.answers.entries()]
               .filter(([, a]) => round.mode !== "title" || a.correct)
               .map(([id]) => id),

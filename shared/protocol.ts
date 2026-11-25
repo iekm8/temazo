@@ -74,6 +74,8 @@ export interface RoundView {
   endsAt: number; // server ms
   question?: Question; // hidden during countdown
   answered: string[]; // player ids that answered / guessed right
+  /** Audio to load ahead of time: this round's during the countdown, the next one's afterwards. */
+  preload?: string;
   reveal?: Reveal;
 }
 
