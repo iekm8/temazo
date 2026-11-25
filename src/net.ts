@@ -1,7 +1,13 @@
 import { io, type Socket } from "socket.io-client";
 import type { ClientToServer, ServerToClient } from "../shared/protocol.ts";
+import { deezerPreviews } from "./deezer.ts";
 
 export const socket: Socket<ServerToClient, ClientToServer> = io({ autoConnect: true });
+
+// The server may ask us (the host) to look up the song previews on Deezer.
+socket.on("previews:resolve", (ids, ack) => {
+  deezerPreviews(Array.isArray(ids) ? ids.slice(0, 60) : []).then(ack, () => ack([]));
+});
 
 /** serverTime ≈ Date.now() + offset */
 let offset = 0;

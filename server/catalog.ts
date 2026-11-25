@@ -12,9 +12,15 @@ export interface Song {
   cover: string;
 }
 
-export const SONGS: Song[] = JSON.parse(
-  readFileSync(fileURLToPath(new URL("./data/songs.json", import.meta.url)), "utf8"),
-);
+// NFC so accents are one character ("Ú", not "U" + a loose "´" in the hint boxes).
+export const SONGS: Song[] = (
+  JSON.parse(readFileSync(fileURLToPath(new URL("./data/songs.json", import.meta.url)), "utf8")) as Song[]
+).map((s) => ({
+  ...s,
+  title: s.title.normalize("NFC"),
+  artists: s.artists.map((a) => a.normalize("NFC")),
+  alt: s.alt?.map((a) => a.normalize("NFC")),
+}));
 
 const cache = new Map<string, { url: string; at: number }>();
 const DEEZER_TTL = 30 * 60 * 1000; // Deezer preview URLs are signed and expire
@@ -55,20 +61,38 @@ export async function itunesPreview(song: Song): Promise<string> {
   return hit.previewUrl;
 }
 
+// Deezer answers 403 to many cloud hosts (e.g. Render). When that happens we
+// stop asking from the server for a while and let the players' browsers do it.
+let deezerBlockedUntil = process.env.DEEZER_SERVER === "off" ? Infinity : 0;
+
+/** Preview fetched by this server from Deezer (null if blocked / failed). */
 export async function getPreview(song: Song): Promise<string | null> {
   const hit = cache.get(song.id);
   if (hit && Date.now() - hit.at < (hit.url.includes("dzcdn") ? DEEZER_TTL : ITUNES_TTL)) return hit.url;
-  for (const [name, fn] of [
-    ["deezer", deezerPreview],
-    ["itunes", itunesPreview],
-  ] as const) {
-    try {
-      const url = await fn(song);
-      cache.set(song.id, { url, at: Date.now() });
-      return url;
-    } catch (e) {
-      console.warn(`[preview] ${name} falló para "${song.title}": ${(e as Error).message}`);
-    }
+  if (Date.now() < deezerBlockedUntil) return null;
+  try {
+    const url = await deezerPreview(song);
+    cache.set(song.id, { url, at: Date.now() });
+    return url;
+  } catch (e) {
+    const msg = (e as Error).message;
+    if (/HTTP 403/.test(msg)) deezerBlockedUntil = Date.now() + 15 * 60 * 1000;
+    console.warn(`[preview] deezer falló para "${song.title}": ${msg.split("\n")[0]}`);
+    return null;
   }
-  return null;
+}
+
+/** Last resort for songs nobody could resolve. */
+export async function itunesPreviews(songs: Song[]): Promise<(string | null)[]> {
+  return Promise.all(
+    songs.map(async (s) => {
+      try {
+        const url = await itunesPreview(s);
+        cache.set(s.id, { url, at: Date.now() });
+        return url;
+      } catch {
+        return null;
+      }
+    }),
+  );
 }

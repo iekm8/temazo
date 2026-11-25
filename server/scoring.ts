@@ -10,7 +10,7 @@ export function yearPoints(guess: number, actual: number): number {
   return [1000, 700, 400, 200][diff] ?? 0;
 }
 
-/** Hides letters/digits of a title, keeping the positions in `shown`. */
+/** Hides letters/digits of a title (expected in NFC), keeping the positions in `shown`. */
 export function makeMask(title: string, shown: Set<number> = new Set()): string {
   return [...title].map((ch, i) => (/[\p{L}\p{N}]/u.test(ch) && !shown.has(i) ? "_" : ch)).join("");
 }

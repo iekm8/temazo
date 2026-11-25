@@ -106,4 +106,6 @@ export interface ClientToServer {
 
 export interface ServerToClient {
   state: (s: RoomState) => void;
+  /** Ask the host's browser for Deezer preview URLs (Deezer blocks many cloud servers). */
+  "previews:resolve": (deezerIds: number[], ack: (urls: (string | null)[]) => void) => void;
 }

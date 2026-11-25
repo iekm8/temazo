@@ -73,6 +73,32 @@ describe("Room", () => {
     expect(room.view().settings).toEqual({ rounds: 5, modes: ["title"] });
   });
 
+  it("uses fallbacks (the host's browser) when the server can't get previews", async () => {
+    const room = new Room("ABCD", { songs, getPreview: async () => null, onChange: () => {} });
+    const a = room.join("Ana");
+    if (!a.ok) throw new Error("join failed");
+    room.updateSettings(a.playerId, { rounds: 2, modes: ["title"] });
+    const seen: string[][] = [];
+    const host = async (ss: Song[]) => {
+      seen.push(ss.map((s) => s.id));
+      return ss.map((s, i) => (i === 0 ? null : `https://x/${s.deezerId}.mp3`));
+    };
+    const last = async (ss: Song[]) => ss.map((s) => `https://it/${s.deezerId}.m4a`);
+    expect((await room.start(a.playerId, [host, last])).ok).toBe(true);
+    expect(seen[0].length).toBeGreaterThanOrEqual(2); // asked for spare songs too
+    expect(room.view().round?.total).toBe(2);
+    room.destroy();
+  });
+
+  it("tells the lobby when no song could be loaded", async () => {
+    const room = new Room("ABCD", { songs, getPreview: async () => null, onChange: () => {} });
+    const a = room.join("Ana");
+    if (!a.ok) throw new Error("join failed");
+    expect((await room.start(a.playerId)).ok).toBe(false);
+    expect(room.phase).toBe("lobby");
+    expect(room.view().notice).toMatch(/No se pudieron cargar/);
+  });
+
   it("dedupes names and makes the first player host", () => {
     const room = new Room("ABCD", { songs, getPreview: async () => "u", onChange: () => {} });
     const a = room.join("Ana");

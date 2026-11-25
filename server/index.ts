@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import express from "express";
 import { Server } from "socket.io";
 import type { ClientToServer, ServerToClient } from "../shared/protocol.ts";
-import { SONGS, deezerPreview, getPreview, itunesPreview } from "./catalog.ts";
+import { SONGS, deezerPreview, getPreview, itunesPreview, itunesPreviews, type Song } from "./catalog.ts";
 import { Room } from "./room.ts";
 
 // In dev Vite owns PORT (5173) and proxies /socket.io to 3001.
@@ -116,7 +116,24 @@ io.on("connection", (socket) => {
   socket.on("game:start", async (ack) => {
     const room = current();
     if (!room || !socket.data.playerId) return ack({ ok: false, error: "No estás en una sala" });
-    ack(await room.start(socket.data.playerId));
+    // If this server can't reach Deezer, the host's browser fetches the previews.
+    const fromHost = async (songs: Song[]) => {
+      try {
+        const urls = await socket.timeout(20000).emitWithAck("previews:resolve", songs.map((s) => s.deezerId));
+        // Only trust Deezer's own CDN: these URLs are played by every player.
+        return songs.map((_, i) => {
+          const u = Array.isArray(urls) ? urls[i] : null;
+          try {
+            return typeof u === "string" && /(^|\.)dzcdn\.net$/.test(new URL(u).hostname) && u.startsWith("https://") ? u : null;
+          } catch {
+            return null;
+          }
+        });
+      } catch {
+        return songs.map(() => null);
+      }
+    };
+    ack(await room.start(socket.data.playerId, [fromHost, itunesPreviews]));
   });
 
   socket.on("game:again", () => {

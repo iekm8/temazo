@@ -48,6 +48,8 @@ interface Round {
   answers: Map<string, Answer>;
 }
 
+export type PreviewResolver = (songs: Song[]) => Promise<(string | null)[]>;
+
 export interface RoomDeps {
   songs: Song[];
   getPreview: (song: Song) => Promise<string | null>;
@@ -157,18 +159,34 @@ export class Room {
     this.changed();
   }
 
-  async start(playerId: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  /**
+   * @param fallbacks tried in order for the songs whose preview the server
+   * couldn't get (e.g. ask the host's browser, then iTunes).
+   */
+  async start(
+    playerId: string,
+    fallbacks: PreviewResolver[] = [],
+  ): Promise<{ ok: true } | { ok: false; error: string }> {
     if (playerId !== this.hostId) return { ok: false, error: "Solo el anfitrión puede empezar" };
     if (this.phase !== "lobby") return { ok: false, error: "La partida ya ha empezado" };
     this.phase = "loading";
+    this.notice = undefined;
     this.changed();
 
-    const planned = this.planRounds();
-    this.notice = undefined;
+    // Plan a few spare songs in case some previews can't be found.
+    const wanted = this.settings.rounds;
+    const planned = this.planRounds(Math.ceil(wanted * 1.4) + 1);
     const previews = await Promise.all(planned.map((r) => this.deps.getPreview(r.song)));
+    for (const resolve of fallbacks) {
+      const missing = previews.flatMap((p, i) => (p ? [] : [i]));
+      if (!missing.length) break;
+      const got = await resolve(missing.map((i) => planned[i].song)).catch(() => []);
+      missing.forEach((i, k) => (previews[i] = got[k] ?? null));
+    }
     this.rounds = planned
       .map((r, i) => ({ ...r, previewUrl: previews[i] ?? "" }))
-      .filter((r) => r.previewUrl);
+      .filter((r) => r.previewUrl)
+      .slice(0, wanted);
     if (!this.rounds.length) {
       const error = "No se pudieron cargar las canciones. Inténtalo otra vez en un momento.";
       this.phase = "lobby";
@@ -201,8 +219,8 @@ export class Room {
     for (const p of this.players.values()) clearTimeout(p.dropTimer);
   }
 
-  private planRounds(): Omit<Round, "previewUrl">[] {
-    const { rounds, modes } = this.settings;
+  private planRounds(rounds: number): Omit<Round, "previewUrl">[] {
+    const { modes } = this.settings;
     const songs = this.shuffle([...this.deps.songs]);
     // How often each artist appears: frequent ones make better feat options
     // (nobody knows the DJ credited on one track).
